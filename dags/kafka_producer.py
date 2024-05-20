@@ -1,12 +1,17 @@
 import uuid
 import csv
+import os
 import random
 import requests
 from math import sqrt
 import json
 from kafka import KafkaProducer
-import time
 import logging
+from datetime import datetime
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.operators.dummy import DummyOperator
+
 
 def extract_data():
     res = requests.get("https://randomuser.me/api").json()
@@ -14,7 +19,7 @@ def extract_data():
     return res
 
 def get_behaviors(num_of_words):
-    with open("data/behaviors.csv") as csv_file:
+    with open(os.environ.get("AIRFLOW_HOME")+"/dags/data/behaviors.csv") as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=',')
         n = random.sample(range(1,28),num_of_words)
         line = 1
@@ -89,7 +94,7 @@ def format_data(res):
     return data
 
 def stream_data():
-    producer = KafkaProducer(bootstrap_servers=['localhost:9092'], max_block_ms=5000)
+    producer = KafkaProducer(bootstrap_servers=['broker:29092'], max_block_ms=5000)
     for i in range(100):
         try:
             res = extract_data()
@@ -99,5 +104,23 @@ def stream_data():
             logging.error(e)
             continue
 
-stream_data()
+default_args = {
+    'owner': 'lucas',
+    'start_date': datetime(2024, 4, 20, 10, 00)
+}
 
+with DAG('kafka_producer',
+         default_args=default_args,
+         schedule_interval='*/1 * * * *',
+         catchup=False) as dag:
+
+    start = DummyOperator(
+        task_id="start",
+    )
+    
+    streaming_task = PythonOperator(
+        task_id='generate_fake_data',
+        python_callable=stream_data,
+    )
+
+    start >> streaming_task
