@@ -63,6 +63,14 @@ def get_hour_coef(hour):
         return 1.3
     return 1
 
+def get_timeframe(hour):
+    if hour >= 0 and hour < 6:
+        return 'night'
+    if hour > 5 and hour < 12:
+        return 'morning'
+    if hour > 11 and hour < 18:
+        return 'afternoon'
+    return 'evening' 
 
 def format_data(res):
     behaviors = get_behaviors(3)
@@ -71,6 +79,7 @@ def format_data(res):
     location = (round(random.uniform(1,100),2), round(random.uniform(1,100),2))
     hour = random.randint(0,23)
     minutes = random.randint(0,59)
+    timeframe = get_timeframe(hour)
 
     data = {}
     data['id'] = str(uuid.uuid4())
@@ -81,6 +90,7 @@ def format_data(res):
     data['behaviors'] = behaviors
     data['location'] = location
     data['time'] = f"{hour}:{minutes}"
+    data['timeframe'] = timeframe
     data['phone'] = res['phone']
     data['picture'] = res['picture']['medium']
 
@@ -111,16 +121,20 @@ default_args = {
 
 with DAG('kafka_producer',
          default_args=default_args,
-         schedule_interval='*/1 * * * *',
+         schedule_interval='*/5 * * * *',
          catchup=False) as dag:
 
     start = DummyOperator(
         task_id="start",
     )
-    
+
+    end = DummyOperator(
+        task_id="end",
+    )
+
     streaming_task = PythonOperator(
         task_id='generate_fake_data',
         python_callable=stream_data,
     )
 
-    start >> streaming_task
+    start >> streaming_task >> end

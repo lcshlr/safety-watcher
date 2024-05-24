@@ -108,7 +108,6 @@ services:
     image: bitnami/spark:latest
     volumes:
       - ./jobs:/opt/bitnami/spark/app/jobs
-      - ./jobs/requirements.txt:/opt/bitnami/spark/app/requirements.txt
       - ./.env:/opt/bitnami/spark/app/.env
     command: bin/spark-class org.apache.spark.deploy.master.Master
     ports:

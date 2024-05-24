@@ -1,8 +1,8 @@
 import logging
-from pyspark.sql import SparkSession
-from cassandra.cluster import Cluster
-from pyspark.sql.functions import from_json, col
+from pyspark.sql.functions import from_json, col, when
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType, ArrayType, FloatType
+from cassandra.cluster import Cluster
+from pyspark.sql import SparkSession
 import os
 from dotenv import load_dotenv
 
@@ -12,19 +12,18 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+def create_cassandra_connection():
+    cluster = Cluster(['cassandra'])
+    cass_session = cluster.connect()
+    return cass_session
+
 def createSparkSession():
     spark_conn = SparkSession.builder\
         .appName('streaming_alert')\
         .config('spark.jars.packages', "com.datastax.spark:spark-cassandra-connector_2.12:3.5.0,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0")\
         .config('spark.cassandra.connection.host', 'cassandra')\
         .getOrCreate()
-    logger.info("Spark connection created successfully!")
     return spark_conn
-
-def create_cassandra_connection():
-    cluster = Cluster(['cassandra'])
-    cass_session = cluster.connect()
-    return cass_session
 
 def get_kafka_stream(spark_conn):
     kafka_df = spark_conn.readStream \
@@ -42,6 +41,8 @@ def format_kafka_data(data):
         StructField("first_name", StringType(), False),
         StructField("last_name", StringType(), False),
         StructField("gender", StringType(), False),
+        StructField("time", StringType(), False),
+        StructField("timeframe", StringType(), False),
         StructField("age", IntegerType(), False),
         StructField('location', ArrayType(FloatType()), False),
         StructField("dangerosity_score", IntegerType(), False),
@@ -52,6 +53,7 @@ def format_kafka_data(data):
 
     json_data = data.selectExpr("CAST(value AS STRING) as value")
     formatted_data = json_data.withColumn("value", from_json(json_data.value, user_schema)).select("value.*")
+
     return formatted_data
 
 def create_keyspace(session):
@@ -75,6 +77,8 @@ def create_table(session):
         location LIST<FLOAT>,
         dangerosity_score INT,
         behaviors LIST<TEXT>,
+        time TEXT,
+        timeframe TEXT,
         picture TEXT);
     """)
     logger.info("Table created successfully!")
